@@ -1,0 +1,98 @@
+services:
+
+  client:
+    container_name: client
+    image: curlimages/curl
+    entrypoint: sleep inf
+
+  haproxy1:
+    container_name: haproxy1
+    image: haproxy:3.1-alpine
+    environment:
+      # only plain HTTP targets are supported currently
+      ML_TEXT_HOST_PORT: ml-text:80
+      ML_IMAGE_HOST_PORT: ml-image:80
+      ML_DEFAULT_HOST_PORT: ml-default:80
+    volumes:
+      - ./haproxy1/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
+  nginx1:
+    container_name: nginx1
+    image: nginx:latest
+    environment:
+      ML_TEXT_URL: http://ml-text
+      ML_IMAGE_URL: http://ml-image
+      ML_DEFAULT_URL: http://ml-default
+      MAX_BODY_SIZE: 32m
+    volumes:
+      - ./nginx1:/etc/nginx/templates
+
+  openresty1:
+    container_name: openresty1
+    image: openresty/openresty:latest
+    entrypoint: >
+      /bin/sh -c
+      "envsubst '$$ML_TEXT_URL $$ML_IMAGE_URL $$ML_DEFAULT_URL $$MAX_BODY_SIZE'< /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf &&
+      /usr/local/openresty/bin/openresty -g 'daemon off;'"
+    environment:
+      ML_TEXT_URL: http://ml-text
+      ML_IMAGE_URL: http://ml-image
+      ML_DEFAULT_URL: http://ml-default
+      MAX_BODY_SIZE: 32m
+    volumes:
+      - ./openresty1/default.conf.template:/etc/nginx/templates/default.conf.template
+      - ./openresty1/body.lua:/etc/nginx/conf.d/body.lua
+
+  openresty2:
+    container_name: openresty2
+    image: openresty/openresty:latest
+    entrypoint: >
+      /bin/sh -c
+      "envsubst '$$ML_TEXT_URL $$ML_IMAGE_URL $$ML_DEFAULT_URL $$MAX_BODY_SIZE $$CHUNK_SIZE'< /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf &&
+      /usr/local/openresty/bin/openresty -g 'daemon off;'"
+    environment:
+      ML_TEXT_URL: http://ml-text
+      ML_IMAGE_URL: http://ml-image
+      ML_DEFAULT_URL: http://ml-default
+      MAX_BODY_SIZE: 32m
+      CHUNK_SIZE: 33554432 # 32 MiB
+    volumes:
+      - ./openresty2/default.conf.template:/etc/nginx/templates/default.conf.template
+      - ./openresty2/body.lua:/etc/nginx/conf.d/body.lua
+
+  openresty3:
+    container_name: openresty3
+    image: openresty/openresty:latest
+    entrypoint: >
+      /bin/sh -c
+      "envsubst '$$ML_TEXT_URL $$ML_IMAGE_URL $$ML_DEFAULT_URL $$MAX_BODY_SIZE'< /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf &&
+      /usr/local/openresty/bin/openresty -g 'daemon off;'"
+    environment:
+      ML_TEXT_URL: http://ml-text
+      ML_IMAGE_URL: http://ml-image
+      ML_DEFAULT_URL: http://ml-default
+      MAX_BODY_SIZE: 32m
+    volumes:
+      - ./openresty3/default.conf.template:/etc/nginx/templates/default.conf.template
+      - ./openresty3/body.lua:/etc/nginx/conf.d/body.lua
+
+  ml-text:
+    container_name: ml-text
+    hostname: ml-text
+    image: jmalloc/echo-server
+    environment:
+      PORT: 80
+
+  ml-image:
+    container_name: ml-image
+    hostname: ml-image
+    image: jmalloc/echo-server
+    environment:
+      PORT: 80
+
+  ml-default:
+    container_name: ml-default
+    hostname: ml-default
+    image: jmalloc/echo-server
+    environment:
+      PORT: 80

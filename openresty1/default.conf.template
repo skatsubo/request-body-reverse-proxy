@@ -1,0 +1,39 @@
+client_body_in_single_buffer on;
+client_body_buffer_size "${MAX_BODY_SIZE}";
+client_max_body_size "${MAX_BODY_SIZE}";
+
+error_log /dev/stderr info;
+
+log_format upstream_logging '[$time_local] $remote_addr "$request" request_time $request_time upstream_response_time $upstream_response_time up $upstream up_status $upstream_status up_bytes_sent $upstream_bytes_sent msec $msec';
+
+# docker internal DNS resolver
+resolver 127.0.0.11 ipv6=off valid=60s;
+resolver_timeout 5s;
+
+# fix 'using uninitialized "payload_name" variable while logging request' for edge cases
+# when Nginx aborts request processing early, e.g. with '413 Request Entity Too Large'
+map '' $payload_name {
+    default '';
+}
+
+map $payload_name $upstream {
+    "text" "${ML_TEXT_URL}";
+    "image" "${ML_IMAGE_URL}";
+    default "${ML_DEFAULT_URL}";
+}
+
+server {
+    listen 80;
+
+    location /predict {
+        access_log /dev/stdout upstream_logging;
+
+        set $payload_name "";
+
+        # returns/sets $payload_name (such as: text, image) and $upstream
+        access_by_lua_file /etc/nginx/conf.d/body.lua;
+
+        proxy_set_header X-Upstream $upstream;
+        proxy_pass $upstream;
+    }
+}
